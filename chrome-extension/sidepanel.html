@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conference Intel & Execution Engine</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎯 Conference Intel & Execution Engine</h1>
+      <p class="tagline">Know before you go</p>
+    </header>
+
+    <!-- Onboarding: Step 1 - API Key -->
+    <div id="onboarding-api" class="section hidden">
+      <div class="onboarding-progress">
+        <div class="progress-step active">1</div>
+        <div class="progress-line"></div>
+        <div class="progress-step">2</div>
+        <div class="progress-line"></div>
+        <div class="progress-step">3</div>
+      </div>
+      <h2>Welcome! Let's get started</h2>
+      <p class="description">First, enter your Gemini API key. Your key is stored locally and never sent to our servers.</p>
+      <div class="input-group">
+        <label for="api-key-input">Gemini API Key</label>
+        <input type="password" id="api-key-input" placeholder="Enter Gemini API Key">
+      </div>
+      <p class="hint">Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></p>
+      <div class="onboarding-actions">
+        <button id="onboarding-api-next" class="btn primary">Next →</button>
+      </div>
+      <div class="import-existing">
+        <p>Already have a profile? <button id="import-profile-btn" class="btn-link">Import settings</button></p>
+        <input type="file" id="import-file-input" accept=".json" class="hidden">
+      </div>
+    </div>
+
+    <!-- Onboarding: Step 2 - Company Profile -->
+    <div id="onboarding-company" class="section hidden">
+      <div class="onboarding-progress">
+        <div class="progress-step completed">✓</div>
+        <div class="progress-line completed"></div>
+        <div class="progress-step active">2</div>
+        <div class="progress-line"></div>
+        <div class="progress-step">3</div>
+      </div>
+      <h2>Your Company Profile</h2>
+      <p class="description">Tell us about your company so we can provide relevant insights.</p>
+      
+      <div class="input-group">
+        <label for="ob-company-name">Company Name *</label>
+        <input type="text" id="ob-company-name" placeholder="e.g., Acme Corp">
+      </div>
+      
+      <div class="input-group">
+        <label for="ob-your-role">Your Role</label>
+        <input type="text" id="ob-your-role" placeholder="e.g., Account Executive">
+      </div>
+      
+      <div class="input-group">
+        <label for="ob-product">Product/Service Description</label>
+        <textarea id="ob-product" rows="3" placeholder="Briefly describe what you sell..."></textarea>
+      </div>
+      
+      <div class="input-group">
+        <label for="ob-value-prop">Key Value Proposition</label>
+        <textarea id="ob-value-prop" rows="2" placeholder="What's your main pitch?"></textarea>
+      </div>
+      
+      <div class="onboarding-actions">
+        <button id="onboarding-company-back" class="btn secondary">← Back</button>
+        <button id="onboarding-company-next" class="btn primary">Next →</button>
+      </div>
+    </div>
+
+    <!-- Onboarding: Step 3 - Goals & Metrics -->
+    <div id="onboarding-goals" class="section hidden">
+      <div class="onboarding-progress">
+        <div class="progress-step completed">✓</div>
+        <div class="progress-line completed"></div>
+        <div class="progress-step completed">✓</div>
+        <div class="progress-line completed"></div>
+        <div class="progress-step active">3</div>
+      </div>
+      <h2>Goals & Metrics</h2>
+      <p class="description">Help us understand your targets to calculate event ROI.</p>
+      
+      <div class="input-group">
+        <label for="ob-target-personas">Target Personas (job titles you want to meet)</label>
+        <input type="text" id="ob-target-personas" placeholder="e.g., VP Sales, CRO, Head of Revenue">
+      </div>
+      
+      <div class="input-group">
+        <label for="ob-target-industries">Target Industries</label>
+        <input type="text" id="ob-target-industries" placeholder="e.g., SaaS, Healthcare, Fintech">
+      </div>
+      
+      <div class="input-group">
+        <label for="ob-competitors">Key Competitors</label>
+        <input type="text" id="ob-competitors" placeholder="e.g., Competitor A, Competitor B">
+      </div>
+      
+      <div class="row-2">
+        <div class="input-group">
+          <label for="ob-deal-size">Avg Deal Size ($)</label>
+          <input type="number" id="ob-deal-size" placeholder="50000">
+        </div>
+        <div class="input-group">
+          <label for="ob-conversion-rate">Lead→Opp Rate (%)</label>
+          <input type="number" id="ob-conversion-rate" placeholder="15" min="0" max="100">
+        </div>
+      </div>
+      
+      <div class="row-2">
+        <div class="input-group">
+          <label for="ob-opp-win-rate">Opp Win Rate (%)</label>
+          <input type="number" id="ob-opp-win-rate" placeholder="25" min="0" max="100">
+        </div>
+        <div class="input-group">
+          <label for="ob-event-goal">Event Meeting Goal</label>
+          <input type="number" id="ob-event-goal" placeholder="10">
+        </div>
+      </div>
+      
+      <div class="input-group">
+        <label for="ob-notes">Additional Notes/Goals</label>
+        <textarea id="ob-notes" rows="2" placeholder="Any other context for event prep..."></textarea>
+      </div>
+      
+      <div class="onboarding-actions">
+        <button id="onboarding-goals-back" class="btn secondary">← Back</button>
+        <button id="onboarding-goals-finish" class="btn primary">Finish Setup ✓</button>
+      </div>
+    </div>
+
+    <!-- Main Analysis Section -->
+    <div id="main-section" class="section hidden">
+      <!-- Current Page Info -->
+      <div class="current-page">
+        <span class="label">Current page:</span>
+        <span id="current-url" class="url">Loading...</span>
+      </div>
+
+      <div class="actions">
+        <button id="analyze-btn" class="btn primary large">
+          <span class="icon">🔍</span>
+          Analyze This Event
+        </button>
+        <button id="settings-btn" class="btn secondary icon-btn" title="Settings">⚙️</button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Analyzing event page...</p>
+      </div>
+
+      <!-- Results Section -->
+      <div id="results" class="results hidden">
+        <!-- ROI Estimate - First priority -->
+        <div id="roi-card" class="card roi-card">
+          <h3>💰 Potential ROI</h3>
+          <div id="roi-content" class="content"></div>
+        </div>
+
+        <!-- Next Best Actions -->
+        <div class="card highlight">
+          <h3>⚡ Next Best Actions</h3>
+          <div id="next-actions" class="content"></div>
+        </div>
+
+        <!-- Quick Actions Bar -->
+        <div class="quick-actions">
+          <button id="export-all-btn" class="btn primary">📥 Export All Contacts</button>
+          <button id="view-targets-btn" class="btn secondary">🎯 View Targets Only</button>
+        </div>
+
+        <!-- Event Overview -->
+        <div class="card">
+          <h3>📅 Event Overview</h3>
+          <div id="event-overview" class="content"></div>
+        </div>
+
+        <!-- Expected Personas -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🎭 Expected Personas</h3>
+          </div>
+          <div id="personas-list" class="content"></div>
+        </div>
+
+        <!-- People -->
+        <div class="card">
+          <div class="card-header">
+            <h3>👥 People</h3>
+            <span id="people-count" class="count"></span>
+          </div>
+          <div id="people-filter" class="filter-bar hidden">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="targets">🎯 Targets</button>
+            <button class="filter-btn" data-filter="speakers">Speakers</button>
+          </div>
+          <div id="people-list" class="content"></div>
+        </div>
+
+        <!-- Sponsors -->
+        <div class="card">
+          <div class="card-header">
+            <h3>🏢 Sponsors</h3>
+            <span id="sponsors-count" class="count"></span>
+          </div>
+          <div id="sponsors-list" class="content"></div>
+        </div>
+
+        <!-- Additional Actions -->
+        <div class="result-actions">
+          <button id="copy-btn" class="btn secondary">📋 Copy</button>
+          <button id="csv-btn" class="btn secondary">📥 CSV</button>
+          <button id="reanalyze-btn" class="btn secondary">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div id="error" class="error hidden">
+        <p class="error-message"></p>
+        <button id="retry-btn" class="btn secondary">Retry</button>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">🎪</div>
+        <h3>Ready to Analyze</h3>
+        <p>Navigate to a conference or event website, then click "Analyze This Event" to extract insights.</p>
+      </div>
+    </div>
+
+    <!-- Settings Section (Full Screen) -->
+    <div id="settings-section" class="section hidden">
+      <div class="settings-header">
+        <button id="settings-back-btn" class="btn-back">← Back</button>
+        <h2>Settings</h2>
+      </div>
+      
+      <div class="settings-tabs">
+        <button class="tab-btn active" data-tab="profile">Profile</button>
+        <button class="tab-btn" data-tab="goals">Goals</button>
+        <button class="tab-btn" data-tab="api">API</button>
+      </div>
+      
+      <!-- Profile Tab -->
+      <div id="tab-profile" class="tab-content active">
+        <div class="input-group">
+          <label for="set-company-name">Company Name</label>
+          <input type="text" id="set-company-name" placeholder="e.g., Acme Corp">
+        </div>
+        <div class="input-group">
+          <label for="set-your-role">Your Role</label>
+          <input type="text" id="set-your-role" placeholder="e.g., Account Executive">
+        </div>
+        <div class="input-group">
+          <label for="set-product">Product/Service Description</label>
+          <textarea id="set-product" rows="3" placeholder="Briefly describe what you sell..."></textarea>
+        </div>
+        <div class="input-group">
+          <label for="set-value-prop">Key Value Proposition</label>
+          <textarea id="set-value-prop" rows="2" placeholder="What's your main pitch?"></textarea>
+        </div>
+      </div>
+      
+      <!-- Goals Tab -->
+      <div id="tab-goals" class="tab-content hidden">
+        <div class="input-group">
+          <label for="set-target-personas">Target Personas</label>
+          <input type="text" id="set-target-personas" placeholder="e.g., VP Sales, CRO, Head of Revenue">
+        </div>
+        <div class="input-group">
+          <label for="set-target-industries">Target Industries</label>
+          <input type="text" id="set-target-industries" placeholder="e.g., SaaS, Healthcare, Fintech">
+        </div>
+        <div class="input-group">
+          <label for="set-competitors">Key Competitors</label>
+          <input type="text" id="set-competitors" placeholder="e.g., Competitor A, Competitor B">
+        </div>
+        <div class="row-2">
+          <div class="input-group">
+            <label for="set-deal-size">Avg Deal Size ($)</label>
+            <input type="number" id="set-deal-size" placeholder="50000">
+          </div>
+          <div class="input-group">
+            <label for="set-conversion-rate">Lead→Opp (%)</label>
+            <input type="number" id="set-conversion-rate" placeholder="15">
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="input-group">
+            <label for="set-opp-win-rate">Win Rate (%)</label>
+            <input type="number" id="set-opp-win-rate" placeholder="25">
+          </div>
+          <div class="input-group">
+            <label for="set-event-goal">Meeting Goal</label>
+            <input type="number" id="set-event-goal" placeholder="10">
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="set-notes">Additional Notes</label>
+          <textarea id="set-notes" rows="2" placeholder="Any other context..."></textarea>
+        </div>
+      </div>
+      
+      <!-- API Tab -->
+      <div id="tab-api" class="tab-content hidden">
+        <div class="input-group">
+          <label for="set-api-key">Gemini API Key</label>
+          <input type="password" id="set-api-key" placeholder="Enter API key">
+        </div>
+        <p class="hint">Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></p>
+      </div>
+      
+      <div class="settings-footer">
+        <button id="save-settings-btn" class="btn primary full-width">Save Changes</button>
+        <div class="import-export">
+          <button id="export-settings-btn" class="btn secondary">📤 Export</button>
+          <button id="import-settings-btn" class="btn secondary">📥 Import</button>
+          <input type="file" id="settings-import-file" accept=".json" class="hidden">
+        </div>
+        <button id="reset-extension-btn" class="btn danger full-width">🔄 Reset Extension (Demo Mode)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Persona Deep Dive Modal -->
+  <div id="persona-modal" class="modal hidden">
+    <div class="modal-content persona-modal-content">
+      <div class="modal-header">
+        <h2 id="persona-modal-title">👤 Persona Deep Dive</h2>
+        <button id="persona-modal-close" class="btn-close">×</button>
+      </div>
+      <div class="persona-details">
+        <div id="persona-info"></div>
+        <div class="persona-starters">
+          <h4>💬 Conversation Starters</h4>
+          <div id="persona-starters-list"></div>
+        </div>
+        <div class="persona-keywords">
+          <h4>🏷️ Keywords to Use</h4>
+          <div id="persona-keywords-list"></div>
+        </div>
+        <div class="persona-pain-points">
+          <h4>😣 Pain Points</h4>
+          <div id="persona-pain-points-list"></div>
+        </div>
+      </div>
+      <div class="persona-chat">
+        <h4>🤖 Refine Your Approach</h4>
+        <p class="hint">Ask questions to customize your pitch for this persona at this event</p>
+        <div id="persona-chat-messages" class="chat-messages"></div>
+        <div class="chat-input-container">
+          <input type="text" id="persona-chat-input" placeholder="e.g., How should I open if they seem busy?" />
+          <button id="persona-chat-send" class="btn primary">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="mcp-integration.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

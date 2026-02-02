@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conference Intel & Execution Engine</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎯 Conference Intel & Execution Engine</h1>
+      <p class="tagline">Know before you go</p>
+    </header>
+
+    <!-- API Key Setup -->
+    <div id="setup-section" class="section hidden">
+      <h2>Setup</h2>
+      <p class="description">Enter your Gemini API key to get started. Your key is stored locally and never sent to our servers.</p>
+      <div class="input-group">
+        <input type="password" id="api-key-input" placeholder="Enter Gemini API Key">
+        <button id="save-key-btn" class="btn primary">Save Key</button>
+      </div>
+      <p class="hint">Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></p>
+    </div>
+
+    <!-- Main Analysis Section -->
+    <div id="main-section" class="section hidden">
+      <div class="actions">
+        <button id="analyze-btn" class="btn primary large">
+          <span class="icon">🔍</span>
+          Analyze This Event
+        </button>
+        <button id="settings-btn" class="btn secondary small">⚙️</button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Analyzing event page...</p>
+      </div>
+
+      <!-- Results Section -->
+      <div id="results" class="results hidden">
+        <!-- Event Overview -->
+        <div class="card">
+          <h3>📅 Event Overview</h3>
+          <div id="event-overview" class="content"></div>
+        </div>
+
+        <!-- Speakers -->
+        <div class="card">
+          <h3>🎤 Speakers</h3>
+          <div id="speakers-list" class="content"></div>
+        </div>
+
+        <!-- Sponsors -->
+        <div class="card">
+          <h3>🏢 Sponsors</h3>
+          <div id="sponsors-list" class="content"></div>
+        </div>
+
+        <!-- GTM Insights -->
+        <div class="card highlight">
+          <h3>💡 GTM Insights</h3>
+          <div id="gtm-insights" class="content"></div>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div id="error" class="error hidden">
+        <p class="error-message"></p>
+        <button id="retry-btn" class="btn secondary">Retry</button>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Settings</h2>
+        <div class="input-group">
+          <label for="update-key-input">Gemini API Key</label>
+          <input type="password" id="update-key-input" placeholder="Enter new API key">
+        </div>
+        <div class="modal-actions">
+          <button id="update-key-btn" class="btn primary">Update Key</button>
+          <button id="close-settings-btn" class="btn secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
