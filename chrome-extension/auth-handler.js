@@ -6,6 +6,12 @@
 // Initialize auth state on load
 let currentUser = null;
 
+function notifyAuthChanged() {
+  window.dispatchEvent(new CustomEvent('kbyg-auth-changed', {
+    detail: { user: currentUser || null }
+  }));
+}
+
 async function initAuth() {
   await supabase.initialize();
   currentUser = supabase.getUser();
@@ -35,6 +41,8 @@ function updateAuthUI() {
     signedInSection.classList.add('hidden');
     signedOutSection.classList.remove('hidden');
   }
+
+  notifyAuthChanged();
 }
 
 function setupAuthListeners() {

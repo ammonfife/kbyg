@@ -97,6 +97,7 @@ const defaultProfile = {
 // Initialize side panel
 document.addEventListener('DOMContentLoaded', async () => {
   userProfile = await loadProfile();
+  await hydrateProfileFromBackendIfAvailable();
   savedEvents = await loadSavedEvents();
   skippedUrls = await loadSkippedUrls();
   
@@ -108,6 +109,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateEventsCount();
   } else {
     showOnboardingStep('mode');
+  }
+});
+
+window.addEventListener('kbyg-auth-changed', async () => {
+  const hydrated = await hydrateProfileFromBackendIfAvailable();
+  if (!hydrated) return;
+
+  if (userProfile.onboardingComplete && (userProfile.useServerProxy || userProfile.geminiApiKey)) {
+    showMainSection();
+    updateProfileIndicator();
+    await updateCurrentUrl();
+    await checkForCachedAnalysis();
+    updateEventsCount();
   }
 });
 
@@ -125,6 +139,41 @@ async function saveProfile(profile) {
   return new Promise((resolve) => {
     chrome.storage.local.set({ userProfile: profile }, resolve);
   });
+}
+
+async function syncProfileToBackendIfAvailable(profile) {
+  try {
+    if (!window.backendAPI || !window.supabase?.isAuthenticated?.()) return;
+    await window.backendAPI.initialize();
+    await window.backendAPI.saveProfile(profile);
+  } catch (error) {
+    console.warn('[Profile Sync] Failed to save profile to backend:', error?.message || error);
+  }
+}
+
+async function hydrateProfileFromBackendIfAvailable() {
+  try {
+    if (!window.backendAPI || !window.supabase?.isAuthenticated?.()) return false;
+
+    await window.backendAPI.initialize();
+    const backendProfile = await window.backendAPI.getProfile();
+
+    if (!backendProfile || typeof backendProfile !== 'object') return false;
+
+    const mergedProfile = {
+      ...defaultProfile,
+      ...backendProfile,
+      useServerProxy: backendProfile.useServerProxy !== false,
+    };
+
+    if (!mergedProfile.onboardingComplete) return false;
+
+    await saveProfile(mergedProfile);
+    return true;
+  } catch (error) {
+    console.warn('[Profile Sync] Failed to load profile from backend:', error?.message || error);
+    return false;
+  }
 }
 
 // Events Storage
@@ -1467,6 +1516,7 @@ selectProBtn?.addEventListener('click', async () => {
   userProfile.geminiApiKey = '';
   onboardingUsedByok = false;
   await saveProfile(userProfile);
+  await syncProfileToBackendIfAvailable(userProfile);
   showOnboardingStep(2); // Go directly to company profile
 });
 
@@ -1539,6 +1589,7 @@ onboardingApiNext.addEventListener('click', async () => {
   userProfile.useServerProxy = true;
   onboardingUsedByok = true;
   await saveProfile(userProfile);
+  await syncProfileToBackendIfAvailable(userProfile);
   showOnboardingStep(2);
 });
 
@@ -1561,6 +1612,7 @@ onboardingCompanyNext.addEventListener('click', async () => {
   userProfile.product = document.getElementById('ob-product').value.trim();
   userProfile.valueProp = document.getElementById('ob-value-prop').value.trim();
   await saveProfile(userProfile);
+  await syncProfileToBackendIfAvailable(userProfile);
   showOnboardingStep(3);
 });
 
@@ -1577,6 +1629,7 @@ onboardingGoalsFinish.addEventListener('click', async () => {
   userProfile.notes = document.getElementById('ob-notes').value.trim();
   userProfile.onboardingComplete = true;
   await saveProfile(userProfile);
+  await syncProfileToBackendIfAvailable(userProfile);
   showToast('Setup complete!');
   showMainSection();
   updateCurrentUrl();
@@ -1602,6 +1655,7 @@ async function handleImportProfile(e) {
     // Merge with defaults to ensure all fields exist
     userProfile = { ...defaultProfile, ...imported, onboardingComplete: true };
     await saveProfile(userProfile);
+    await syncProfileToBackendIfAvailable(userProfile);
     showToast('Profile imported successfully!');
     showMainSection();
     updateCurrentUrl();
@@ -1665,6 +1719,7 @@ saveSettingsBtn.addEventListener('click', async () => {
   userProfile.useServerProxy = true;
   
   await saveProfile(userProfile);
+  await syncProfileToBackendIfAvailable(userProfile);
   settingsSection.classList.add('hidden');
   mainSection.classList.remove('hidden');
   headerNav?.classList.remove('hidden');
