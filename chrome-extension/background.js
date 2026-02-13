@@ -267,6 +267,12 @@ async function handleAnalyzeEvent(request) {
   });
 
   const normalizedData = backfillEntitiesFromExtractedContent(data, content);
+  const enrichedData = enrichParsedDataFromContent(normalizedData, content, title, url);
+  const repairedData = await attemptFieldRepairIfNeeded(apiKeyOverride, enrichedData, content, {
+    pageUrl: url,
+    pageTitle: title,
+  });
+  const finalData = normalizeFinalDataShape(repairedData);
 
   // ✨ Save to backend database
   try {
@@ -274,18 +280,18 @@ async function handleAnalyzeEvent(request) {
     
     const eventData = {
       url: url,
-      eventName: normalizedData.eventName,
-      date: normalizedData.date,
-      startDate: normalizedData.startDate || normalizedData.date,
-      endDate: normalizedData.endDate || normalizedData.date,
-      location: normalizedData.location,
-      description: normalizedData.description,
-      estimatedAttendees: normalizedData.estimatedAttendees || 0,
-      people: normalizedData.people || [],
-      sponsors: normalizedData.sponsors || [],
-      expectedPersonas: normalizedData.expectedPersonas || [],
-      nextBestActions: normalizedData.nextBestActions || [],
-      relatedEvents: normalizedData.relatedEvents || [],
+      eventName: finalData.eventName,
+      date: finalData.date,
+      startDate: finalData.startDate || finalData.date,
+      endDate: finalData.endDate || finalData.date,
+      location: finalData.location,
+      description: finalData.description,
+      estimatedAttendees: finalData.estimatedAttendees || 0,
+      people: finalData.people || [],
+      sponsors: finalData.sponsors || [],
+      expectedPersonas: finalData.expectedPersonas || [],
+      nextBestActions: finalData.nextBestActions || [],
+      relatedEvents: finalData.relatedEvents || [],
       analyzedAt: new Date().toISOString(),
     };
 
@@ -293,15 +299,15 @@ async function handleAnalyzeEvent(request) {
     console.log('[KBYG Backend] Event saved to database:', saveResult.eventId);
     
     // Add backend metadata to response
-    normalizedData.backendSaved = true;
-    normalizedData.backendEventId = saveResult.eventId;
+    finalData.backendSaved = true;
+    finalData.backendEventId = saveResult.eventId;
   } catch (backendError) {
     console.error('[KBYG Backend] Failed to save event:', backendError);
-    normalizedData.backendSaved = false;
-    normalizedData.backendError = backendError.message;
+    finalData.backendSaved = false;
+    finalData.backendError = backendError.message;
   }
 
-  return { data: normalizedData };
+  return { data: finalData };
 }
 
 function backfillEntitiesFromExtractedContent(data, content) {
@@ -346,6 +352,358 @@ function backfillEntitiesFromExtractedContent(data, content) {
   }
 
   return result;
+}
+
+function parseIsoDate(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function stripEventTitleSuffix(title) {
+  if (!title || typeof title !== 'string') return null;
+  const cleaned = title
+    .replace(/\s*\|\s*[^|]+$/g, '')
+    .replace(/\s*[·•-]\s*[^·•-]+$/g, '')
+    .trim();
+  return cleaned || null;
+}
+
+function extractDatesFromText(text) {
+  if (!text || typeof text !== 'string') return { startDate: null, endDate: null };
+
+  const explicitRange = text.match(/([A-Z][a-z]+\s+\d{1,2})\s*[-–]\s*(\d{1,2}),\s*(\d{4})/);
+  if (explicitRange) {
+    const monthDayStart = `${explicitRange[1]}, ${explicitRange[3]}`;
+    const month = explicitRange[1].split(/\s+/)[0];
+    const monthDayEnd = `${month} ${explicitRange[2]}, ${explicitRange[3]}`;
+    return {
+      startDate: parseIsoDate(monthDayStart),
+      endDate: parseIsoDate(monthDayEnd),
+    };
+  }
+
+  const single = text.match(/([A-Z][a-z]+\s+\d{1,2},\s*\d{4})/);
+  if (single) {
+    const parsed = parseIsoDate(single[1]);
+    return { startDate: parsed, endDate: parsed };
+  }
+
+  return { startDate: null, endDate: null };
+}
+
+function parseCompanyFromTitle(title) {
+  if (!title || typeof title !== 'string') return { roleTitle: null, company: null };
+  const parts = title.split('|').map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return {
+      roleTitle: parts[0],
+      company: parts.slice(1).join(' | '),
+    };
+  }
+  return {
+    roleTitle: title.trim() || null,
+    company: null,
+  };
+}
+
+function enrichPeopleFromSpeakerDirectory(people, speakerDirectory) {
+  if (!Array.isArray(people) || !Array.isArray(speakerDirectory)) return people || [];
+
+  const byName = new Map();
+  for (const entry of speakerDirectory) {
+    const name = typeof entry?.name === 'string' ? entry.name.trim().toLowerCase() : '';
+    if (!name) continue;
+    byName.set(name, entry);
+  }
+
+  return people.map((person) => {
+    if (!person || typeof person !== 'object') return person;
+
+    const nameKey = typeof person.name === 'string' ? person.name.trim().toLowerCase() : '';
+    const directoryEntry = byName.get(nameKey);
+    if (!directoryEntry) return person;
+
+    const parsed = parseCompanyFromTitle(directoryEntry.context || '');
+    return {
+      ...person,
+      title: person.title || parsed.roleTitle,
+      company: person.company || parsed.company,
+      role: person.role || 'Speaker',
+    };
+  });
+}
+
+function derivePersonasFromPeople(people) {
+  if (!Array.isArray(people) || people.length === 0) return [];
+
+  const titles = people
+    .map((p) => `${p?.title || ''} ${p?.role || ''}`.trim())
+    .filter(Boolean)
+    .slice(0, 25);
+
+  const buckets = new Set();
+  for (const title of titles) {
+    const lower = title.toLowerCase();
+    if (/(ceo|chief|president|founder|cofounder)/.test(lower)) buckets.add('Executive Leader');
+    if (/(vp|vice president|director|head of)/.test(lower)) buckets.add('VP/Director');
+    if (/(marketing|growth|brand|go[- ]to[- ]market|sales)/.test(lower)) buckets.add('Marketing & Growth Leader');
+    if (/(operations|operator|franchise|franchising|restaurant excellence)/.test(lower)) buckets.add('Operations Leader');
+    if (/(technology|it|digital|innovation|ai)/.test(lower)) buckets.add('Technology Leader');
+  }
+
+  return Array.from(buckets).slice(0, 5).map((personaName) => ({
+    persona: personaName,
+    likelihood: 'High',
+    count: 'Many',
+    linkedinMessage: `Enjoyed seeing ${personaName.toLowerCase()} represented at this event—open to connecting?`,
+    iceBreaker: `What is the biggest priority for ${personaName.toLowerCase()} in 2026?`,
+    conversationStarters: ['What are your top priorities this quarter?', 'Which strategy is working best right now?', 'Where do you see the biggest execution gap?'],
+    keywords: ['growth', 'operations', 'technology'],
+    painPoints: ['Limited bandwidth', 'Need measurable ROI'],
+  }));
+}
+
+function defaultNextBestActions(eventName) {
+  return [
+    {
+      priority: 1,
+      action: `Identify top 10 speaker targets for ${eventName || 'this event'} and draft outreach`,
+      reason: 'Speakers are high-context connectors and often influence buying committees.',
+    },
+    {
+      priority: 2,
+      action: 'Build role-based talk tracks for operations, marketing, and technology leaders',
+      reason: 'Role-specific messaging improves conversion from first conversation to follow-up.',
+    },
+    {
+      priority: 3,
+      action: 'Schedule post-event follow-up sequence within 48 hours',
+      reason: 'Fast follow-up preserves context and increases response rates.',
+    },
+  ];
+}
+
+function enrichParsedDataFromContent(data, content, pageTitle, pageUrl) {
+  const result = {
+    ...data,
+    people: Array.isArray(data.people) ? [...data.people] : [],
+    sponsors: Array.isArray(data.sponsors) ? [...data.sponsors] : [],
+    expectedPersonas: Array.isArray(data.expectedPersonas) ? [...data.expectedPersonas] : [],
+    nextBestActions: Array.isArray(data.nextBestActions) ? [...data.nextBestActions] : [],
+    relatedEvents: Array.isArray(data.relatedEvents) ? [...data.relatedEvents] : [],
+  };
+
+  const structuredGraph = Array.isArray(content?.structuredData) ? content.structuredData : [];
+  const flatStructured = structuredGraph.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    if (Array.isArray(entry['@graph'])) return entry['@graph'];
+    return [entry];
+  });
+
+  const eventStructured = flatStructured.find((item) => {
+    const type = item?.['@type'];
+    if (Array.isArray(type)) return type.includes('Event');
+    return type === 'Event';
+  });
+
+  const mainText = typeof content?.mainText === 'string' ? content.mainText : '';
+  const meta = content?.meta || {};
+
+  result.eventName = pickFirstNonEmpty(
+    result.eventName,
+    eventStructured?.name,
+    meta['og:title'],
+    stripEventTitleSuffix(pageTitle)
+  ) || 'Unknown Event';
+
+  result.description = pickFirstNonEmpty(
+    result.description,
+    eventStructured?.description,
+    meta['og:description'],
+    meta.description,
+    mainText.substring(0, 320)
+  );
+
+  const structuredStart = parseIsoDate(eventStructured?.startDate);
+  const structuredEnd = parseIsoDate(eventStructured?.endDate);
+  const textDates = extractDatesFromText(mainText);
+
+  result.startDate = parseIsoDate(result.startDate) || structuredStart || textDates.startDate;
+  result.endDate = parseIsoDate(result.endDate) || structuredEnd || textDates.endDate || result.startDate;
+  result.date = pickFirstNonEmpty(result.date, result.startDate && result.endDate && result.startDate !== result.endDate
+    ? `${result.startDate} to ${result.endDate}`
+    : result.startDate);
+
+  const structuredLocation = eventStructured?.location?.name || eventStructured?.location?.address || null;
+  result.location = pickFirstNonEmpty(result.location, structuredLocation);
+
+  if (!result.estimatedAttendees) {
+    const attendeesMatch = mainText.match(/(\d{2,5})\s*(\+)?\s*(attendees|attending|participants|registered|registrants)/i);
+    result.estimatedAttendees = attendeesMatch ? Number(attendeesMatch[1]) : null;
+  }
+
+  result.people = enrichPeopleFromSpeakerDirectory(result.people, content?.speakerDirectory);
+  if (result.people.length === 0 && Array.isArray(content?.speakerDirectory)) {
+    const unique = new Map();
+    for (const entry of content.speakerDirectory) {
+      const name = typeof entry?.name === 'string' ? entry.name.trim() : '';
+      if (!name) continue;
+      const parsed = parseCompanyFromTitle(entry.context || '');
+      unique.set(name.toLowerCase(), {
+        name,
+        role: 'Speaker',
+        title: parsed.roleTitle,
+        company: parsed.company,
+        persona: null,
+        linkedin: null,
+        linkedinMessage: null,
+        iceBreaker: null,
+      });
+    }
+    result.people = Array.from(unique.values());
+  }
+
+  if (result.expectedPersonas.length === 0) {
+    result.expectedPersonas = derivePersonasFromPeople(result.people);
+  }
+
+  if (result.nextBestActions.length === 0) {
+    result.nextBestActions = defaultNextBestActions(result.eventName);
+  }
+
+  if (!Array.isArray(result.relatedEvents)) {
+    result.relatedEvents = [];
+  }
+
+  if (!result.location && pageUrl) {
+    const host = getHostFromUrl(pageUrl);
+    if (host) result.location = host;
+  }
+
+  return result;
+}
+
+function getMissingFieldSummary(data) {
+  const missing = [];
+  const isBlank = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+
+  if (isBlank(data.eventName) || data.eventName === 'Unknown Event') missing.push('eventName');
+  if (isBlank(data.startDate)) missing.push('startDate');
+  if (isBlank(data.endDate)) missing.push('endDate');
+  if (isBlank(data.location)) missing.push('location');
+  if (isBlank(data.description)) missing.push('description');
+  if (!Array.isArray(data.people) || data.people.length === 0) missing.push('people');
+  if (!Array.isArray(data.sponsors) || data.sponsors.length === 0) missing.push('sponsors');
+  if (!Array.isArray(data.expectedPersonas) || data.expectedPersonas.length === 0) missing.push('expectedPersonas');
+  if (!Array.isArray(data.nextBestActions) || data.nextBestActions.length === 0) missing.push('nextBestActions');
+
+  return missing;
+}
+
+async function attemptFieldRepairIfNeeded(apiKeyOverride, data, content, context = {}) {
+  const missingBefore = getMissingFieldSummary(data);
+  if (missingBefore.length === 0) return data;
+
+  const prompt = `You are repairing missing fields in event extraction JSON.
+
+TASK:
+- Fill ONLY missing or null/empty fields.
+- Do NOT remove existing valid values.
+- Keep strict JSON output only.
+
+MISSING FIELDS:
+${missingBefore.join(', ')}
+
+CURRENT JSON:
+${JSON.stringify(data, null, 2)}
+
+SOURCE PAGE CONTENT:
+${JSON.stringify(content, null, 2)}
+
+Return ONLY repaired JSON.`;
+
+  try {
+    const response = await callGeminiAPI(apiKeyOverride, prompt, {
+      stage: 'repair_missing_fields',
+      pageUrl: context.pageUrl,
+      pageTitle: context.pageTitle,
+    });
+
+    const repaired = parseGeminiResponse(response, {
+      stage: 'repair_missing_fields',
+      pageUrl: context.pageUrl,
+      pageTitle: context.pageTitle,
+    });
+
+    const merged = {
+      ...data,
+      ...repaired,
+      people: Array.isArray(repaired.people) && repaired.people.length ? repaired.people : data.people,
+      sponsors: Array.isArray(repaired.sponsors) && repaired.sponsors.length ? repaired.sponsors : data.sponsors,
+      expectedPersonas: Array.isArray(repaired.expectedPersonas) && repaired.expectedPersonas.length ? repaired.expectedPersonas : data.expectedPersonas,
+      nextBestActions: Array.isArray(repaired.nextBestActions) && repaired.nextBestActions.length ? repaired.nextBestActions : data.nextBestActions,
+      relatedEvents: Array.isArray(repaired.relatedEvents) ? repaired.relatedEvents : data.relatedEvents,
+    };
+
+    const missingAfter = getMissingFieldSummary(merged);
+    if (missingAfter.length < missingBefore.length) {
+      reportParseTelemetry({
+        stage: 'repair_missing_fields',
+        status: 'parse_success',
+        pageUrl: context.pageUrl,
+        pageTitle: context.pageTitle,
+        sampleReason: `missing_before:${missingBefore.length}_after:${missingAfter.length}`,
+      });
+      return merged;
+    }
+  } catch (error) {
+    reportParseTelemetry({
+      stage: 'repair_missing_fields',
+      status: 'parse_error',
+      pageUrl: context.pageUrl,
+      pageTitle: context.pageTitle,
+      errorMessage: String(error?.message || error),
+    });
+  }
+
+  return data;
+}
+
+function normalizeFinalDataShape(data) {
+  return {
+    ...data,
+    eventName: (data.eventName || 'Unknown Event').trim(),
+    date: data.date || null,
+    startDate: parseIsoDate(data.startDate) || null,
+    endDate: parseIsoDate(data.endDate) || parseIsoDate(data.startDate) || null,
+    location: data.location || null,
+    description: data.description || null,
+    estimatedAttendees: typeof data.estimatedAttendees === 'number' ? data.estimatedAttendees : null,
+    people: Array.isArray(data.people) ? data.people : [],
+    sponsors: Array.isArray(data.sponsors) ? data.sponsors : [],
+    expectedPersonas: Array.isArray(data.expectedPersonas) ? data.expectedPersonas : [],
+    nextBestActions: Array.isArray(data.nextBestActions) ? data.nextBestActions : [],
+    relatedEvents: Array.isArray(data.relatedEvents) ? data.relatedEvents : [],
+  };
 }
 
 async function getApiKey() {
