@@ -17,6 +17,65 @@ function resolveApiKeyOverride(profile) {
 }
 
 const PARSE_TELEMETRY_SAMPLE_RATE = 0.12;
+const hostParsingProfileCache = new Map();
+
+function getHostFromUrl(pageUrl) {
+  try {
+    return new URL(pageUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+async function getHostParsingProfile(pageUrl) {
+  const host = getHostFromUrl(pageUrl);
+  if (!host) return null;
+
+  if (hostParsingProfileCache.has(host)) {
+    return hostParsingProfileCache.get(host);
+  }
+
+  try {
+    await ensureBackendAPIInitialized();
+    if (!backendAPI?.authToken && !backendAPI?.bearerToken) {
+      hostParsingProfileCache.set(host, null);
+      return null;
+    }
+
+    const profile = await backendAPI.getParsingProfile({ url: pageUrl });
+    hostParsingProfileCache.set(host, profile || null);
+    return profile || null;
+  } catch {
+    hostParsingProfileCache.set(host, null);
+    return null;
+  }
+}
+
+function buildHostParsingHints(hostProfile) {
+  if (!hostProfile || typeof hostProfile !== 'object') {
+    return '';
+  }
+
+  const entitySources = Array.isArray(hostProfile.suggestedEntitySources) ? hostProfile.suggestedEntitySources : [];
+  const peopleSelectors = Array.isArray(hostProfile.suggestedPeopleSelectors) ? hostProfile.suggestedPeopleSelectors : [];
+  const sponsorSelectors = Array.isArray(hostProfile.suggestedSponsorSelectors) ? hostProfile.suggestedSponsorSelectors : [];
+  const confidence = typeof hostProfile.confidenceScore === 'number' ? hostProfile.confidenceScore : 0;
+  const totalSamples = typeof hostProfile.totalSamples === 'number' ? hostProfile.totalSamples : 0;
+
+  if (!entitySources.length && !peopleSelectors.length && !sponsorSelectors.length) {
+    return '';
+  }
+
+  return `
+HOST PARSING DICTIONARY (learned profile for this domain):
+- Confidence Score: ${confidence}
+- Samples Seen: ${totalSamples}
+- Preferred Entity Sources: ${entitySources.join(', ') || 'none'}
+- People Selectors: ${peopleSelectors.join(', ') || 'none'}
+- Sponsor Selectors: ${sponsorSelectors.join(', ') || 'none'}
+
+Prioritize these learned host patterns when extracting people/sponsors/event details.`;
+}
 
 function shouldSampleParseTelemetry() {
   return Math.random() < PARSE_TELEMETRY_SAMPLE_RATE;
@@ -81,6 +140,8 @@ async function handlePreCheckEvent(request) {
   const apiKeyOverride = resolveApiKeyOverride(profile);
 
   const { content, url, title } = request;
+  const hostProfile = await getHostParsingProfile(url);
+  const hostHints = buildHostParsingHints(hostProfile);
   
   // Truncate content for lightweight check (first 3000 chars should be enough)
   const truncatedContent = content.substring(0, 3000);
@@ -141,7 +202,9 @@ CRITICAL TEST - Ask yourself:
 
 If ANY answer is NO → return isEvent=false or confidence="low"
 
-Only return confidence="high" when you are 100% certain the WHOLE PAGE is a dedicated event page.`;
+Only return confidence="high" when you are 100% certain the WHOLE PAGE is a dedicated event page.
+
+${hostHints}`;
 
   const response = await callGeminiAPI(apiKeyOverride, prompt, {
     stage: 'precheck',
@@ -184,9 +247,10 @@ async function handleAnalyzeEvent(request) {
   const apiKeyOverride = resolveApiKeyOverride(profile);
 
   const { content, url, title } = request;
+  const hostProfile = await getHostParsingProfile(url);
 
   // Build the prompt with user context
-  const prompt = buildAnalysisPrompt(content, url, title, profile);
+  const prompt = buildAnalysisPrompt(content, url, title, profile, hostProfile);
 
   // Call Gemini API
   const response = await callGeminiAPI(apiKeyOverride, prompt, {
@@ -292,7 +356,7 @@ async function getApiKey() {
   });
 }
 
-function buildAnalysisPrompt(content, url, title, profile) {
+function buildAnalysisPrompt(content, url, title, profile, hostProfile = null) {
   // Build user context section
   let userContext = '';
   if (profile.companyName || profile.product) {
@@ -321,9 +385,12 @@ When generating expectedPersonas, ALWAYS include these target personas FIRST if 
 Then add other relevant personas you identify from the event content.`
     : '';
 
+  const hostHints = buildHostParsingHints(hostProfile);
+
   return `You are an AI assistant helping a Go-To-Market (GTM) team analyze conference and event websites.
 ${userContext}
 ${personaGuidance}
+${hostHints}
 
 Extract ALL people and companies from this event page. Return a JSON object:
 

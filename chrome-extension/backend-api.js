@@ -297,6 +297,32 @@ class BackendAPI {
       return { success: false };
     }
   }
+
+  async getParsingProfile({ url, host } = {}) {
+    try {
+      const params = new URLSearchParams();
+      if (url) params.append('url', url);
+      if (host) params.append('host', host);
+
+      if (!params.toString()) {
+        return null;
+      }
+
+      const response = await fetch(`${this.baseUrl}/parsing-profile?${params.toString()}`, {
+        headers: this.getHeaders(),
+      });
+
+      const result = await response.json().catch(() => ({ success: false }));
+      if (!response.ok || !result.success) {
+        return null;
+      }
+
+      return result.profile || null;
+    } catch (error) {
+      console.warn('[KBYG Backend] Failed to load parsing profile:', error?.message || error);
+      return null;
+    }
+  }
 }
 
 // Create global instance
