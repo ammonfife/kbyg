@@ -3,14 +3,8 @@
 // Import auth and backend API files
 importScripts('supabase-client.js', 'config.js', 'backend-api.js');
 
-// Backend API initialization
-let backendAPIInitialized = false;
-
 async function ensureBackendAPIInitialized() {
-  if (!backendAPIInitialized) {
-    await backendAPI.initialize();
-    backendAPIInitialized = true;
-  }
+  await backendAPI.initialize();
 }
 
 // Open side panel when extension icon is clicked
