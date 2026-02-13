@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KBYG - Know Before You Go",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "description": "AI-powered conference intelligence for GTM teams - know before you go",
   "permissions": [
     "activeTab",
