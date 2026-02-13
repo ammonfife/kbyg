@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MANIFEST_PATH="chrome-extension/manifest.json"
+
+if [[ ! -f "$MANIFEST_PATH" ]]; then
+  exit 0
+fi
+
+last_commit_subject="$(git log -1 --pretty=%s 2>/dev/null || true)"
+if [[ "$last_commit_subject" == "chore(version): auto-bump extension version to "*" [auto-version]" ]]; then
+  exit 0
+fi
+
+current_version="$(python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path('chrome-extension/manifest.json')
+try:
+    data = json.loads(p.read_text())
+    print(data.get('version', '').strip())
+except Exception:
+    print('')
+PY
+)"
+
+if [[ -z "$current_version" ]]; then
+  echo "[pre-push] Could not read version from $MANIFEST_PATH; skipping auto-bump." >&2
+  exit 0
+fi
+
+if [[ ! "$current_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  echo "[pre-push] Version '$current_version' is not semver x.y.z; skipping auto-bump." >&2
+  exit 0
+fi
+
+major="${BASH_REMATCH[1]}"
+minor="${BASH_REMATCH[2]}"
+patch="${BASH_REMATCH[3]}"
+next_version="$major.$minor.$((patch + 1))"
+
+python3 - <<PY
+import json
+from pathlib import Path
+p = Path('$MANIFEST_PATH')
+data = json.loads(p.read_text())
+data['version'] = '$next_version'
+p.write_text(json.dumps(data, indent=2) + '\n')
+PY
+
+git add "$MANIFEST_PATH"
+if git diff --cached --quiet -- "$MANIFEST_PATH"; then
+  exit 0
+fi
+
+git commit -m "chore(version): auto-bump extension version to $next_version [auto-version]" -- "$MANIFEST_PATH" >/dev/null
+
+echo "[pre-push] Auto-bumped extension version to $next_version." >&2
+echo "[pre-push] Push blocked once so the new version commit is included." >&2
+echo "[pre-push] Re-run: git push" >&2
+exit 1
