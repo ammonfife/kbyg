@@ -470,6 +470,53 @@ function extractBestEffortJson(textContent) {
   return jsonStr;
 }
 
+function extractFallbackEventData(rawText) {
+  const text = String(rawText || '');
+
+  const readString = (key) => {
+    const match = text.match(new RegExp(`"${key}"\\s*:\\s*"([\\s\\S]*?)"`));
+    if (!match) return null;
+    return match[1]
+      .replace(/\\n/g, ' ')
+      .replace(/\\"/g, '"')
+      .trim();
+  };
+
+  const readNumber = (key) => {
+    const match = text.match(new RegExp(`"${key}"\\s*:\\s*(\\d+)`));
+    return match ? Number(match[1]) : null;
+  };
+
+  const eventName = readString('eventName');
+  const date = readString('date');
+  const startDate = readString('startDate');
+  const endDate = readString('endDate');
+  const location = readString('location');
+  const description = readString('description');
+  const estimatedAttendees = readNumber('estimatedAttendees');
+
+  const hasUsefulSignal = !!(eventName || date || location || description);
+  if (!hasUsefulSignal) {
+    return null;
+  }
+
+  return {
+    eventName: eventName || 'Unknown Event',
+    date: date || null,
+    startDate: startDate || null,
+    endDate: endDate || null,
+    location: location || null,
+    description: description || null,
+    estimatedAttendees,
+    people: [],
+    sponsors: [],
+    expectedPersonas: [],
+    nextBestActions: [],
+    relatedEvents: [],
+    gtmInsights: null,
+  };
+}
+
 function parseGeminiResponse(response) {
   try {
     // Check if response was blocked or had issues
@@ -517,6 +564,11 @@ function parseGeminiResponse(response) {
       console.error('JSON parse error:', parseError.message);
       console.error('First 1000 chars of jsonStr:', jsonStr.substring(0, 1000));
       console.error('Last 500 chars of jsonStr:', jsonStr.substring(jsonStr.length - 500));
+      const fallbackData = extractFallbackEventData(jsonStr || textContent);
+      if (fallbackData) {
+        console.warn('Using fallback event extraction due to malformed JSON response');
+        return fallbackData;
+      }
       throw parseError;
     }
     
