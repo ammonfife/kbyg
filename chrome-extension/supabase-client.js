@@ -286,6 +286,10 @@ class SupabaseClient {
 // Create global instance
 const supabase = new SupabaseClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
 
+if (typeof window !== 'undefined') {
+  window.supabase = supabase;
+}
+
 // Export for use in other files
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { supabase, SupabaseClient };

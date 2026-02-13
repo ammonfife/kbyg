@@ -120,7 +120,7 @@ function setupAuthListeners() {
               updateAuthUI();
               
               // Reinitialize backend API
-              if (window.backendAPI) {
+              if (typeof backendAPI !== 'undefined') {
                 await backendAPI.initialize();
               }
               
@@ -217,7 +217,7 @@ function setupAuthListeners() {
       document.getElementById('signin-password').value = '';
       
       // Reinitialize backend API with new user ID
-      if (window.backendAPI) {
+      if (typeof backendAPI !== 'undefined') {
         await backendAPI.initialize();
       }
       
@@ -267,7 +267,7 @@ function setupAuthListeners() {
       document.getElementById('signup-password-confirm').value = '';
       
       // Reinitialize backend API with new user ID
-      if (window.backendAPI) {
+      if (typeof backendAPI !== 'undefined') {
         await backendAPI.initialize();
       }
       
@@ -287,7 +287,7 @@ function setupAuthListeners() {
     updateAuthUI();
     
     // Reinitialize backend API with anonymous ID
-    if (window.backendAPI) {
+    if (typeof backendAPI !== 'undefined') {
       await backendAPI.initialize();
     }
     

@@ -282,6 +282,10 @@ class BackendAPI {
 // Create global instance
 const backendAPI = new BackendAPI(CONFIG.API_BASE_URL, CONFIG.BEARER_TOKEN);
 
+if (typeof window !== 'undefined') {
+  window.backendAPI = backendAPI;
+}
+
 // Export
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { BackendAPI, backendAPI };

@@ -143,9 +143,9 @@ async function saveProfile(profile) {
 
 async function syncProfileToBackendIfAvailable(profile) {
   try {
-    if (!window.backendAPI || !window.supabase?.isAuthenticated?.()) return;
-    await window.backendAPI.initialize();
-    await window.backendAPI.saveProfile(profile);
+    if (typeof backendAPI === 'undefined' || typeof supabase === 'undefined' || !supabase.isAuthenticated()) return;
+    await backendAPI.initialize();
+    await backendAPI.saveProfile(profile);
   } catch (error) {
     console.warn('[Profile Sync] Failed to save profile to backend:', error?.message || error);
   }
@@ -153,10 +153,10 @@ async function syncProfileToBackendIfAvailable(profile) {
 
 async function hydrateProfileFromBackendIfAvailable() {
   try {
-    if (!window.backendAPI || !window.supabase?.isAuthenticated?.()) return false;
+    if (typeof backendAPI === 'undefined' || typeof supabase === 'undefined' || !supabase.isAuthenticated()) return false;
 
-    await window.backendAPI.initialize();
-    const backendProfile = await window.backendAPI.getProfile();
+    await backendAPI.initialize();
+    const backendProfile = await backendAPI.getProfile();
 
     if (!backendProfile || typeof backendProfile !== 'object') return false;
 
