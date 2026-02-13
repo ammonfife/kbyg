@@ -3,8 +3,6 @@
 // Import auth and backend API files
 importScripts('supabase-client.js', 'config.js', 'backend-api.js');
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
-
 // Backend API initialization
 let backendAPIInitialized = false;
 
@@ -57,11 +55,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Lightweight pre-check to determine if page is an event
 async function handlePreCheckEvent(request) {
   const profile = request.userProfile || {};
-  const apiKey = profile.geminiApiKey;
-  
-  if (!apiKey) {
-    throw new Error('API key not configured. Please add your Gemini API key in settings.');
-  }
+  const apiKeyOverride = profile.geminiApiKey || null;
 
   const { content, url, title } = request;
   
@@ -126,7 +120,7 @@ If ANY answer is NO → return isEvent=false or confidence="low"
 
 Only return confidence="high" when you are 100% certain the WHOLE PAGE is a dedicated event page.`;
 
-  const response = await callGeminiAPI(apiKey, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt);
   const result = parsePreCheckResponse(response);
   
   return result;
@@ -159,13 +153,8 @@ function parsePreCheckResponse(response) {
 }
 
 async function handleAnalyzeEvent(request) {
-  // Get API key from user profile
   const profile = request.userProfile || {};
-  const apiKey = profile.geminiApiKey;
-  
-  if (!apiKey) {
-    throw new Error('API key not configured. Please add your Gemini API key in settings.');
-  }
+  const apiKeyOverride = profile.geminiApiKey || null;
 
   const { content, url, title } = request;
 
@@ -173,7 +162,7 @@ async function handleAnalyzeEvent(request) {
   const prompt = buildAnalysisPrompt(content, url, title, profile);
 
   // Call Gemini API
-  const response = await callGeminiAPI(apiKey, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt);
 
   // Parse the response
   const data = parseGeminiResponse(response);
@@ -350,61 +339,51 @@ Page Content:
 ${JSON.stringify(content, null, 2)}`;
 }
 
-async function callGeminiAPI(apiKey, prompt) {
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+async function callGeminiAPI(apiKeyOverride, prompt) {
+  await ensureBackendAPIInitialized();
+
+  const payload = {
+    prompt,
+    temperature: 0.1,
+    maxTokens: 8192,
+  };
+
+  if (apiKeyOverride) {
+    payload.apiKeyOverride = apiKeyOverride;
+  }
+
+  const response = await fetch(`${CONFIG.API_BASE_URL}/gemini/generate`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt
-            }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.1,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-      },
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_NONE"
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_NONE"
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_NONE"
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_NONE"
-        }
-      ]
-    })
+    headers: backendAPI.getHeaders(),
+    body: JSON.stringify(payload),
   });
 
+  const responseData = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    if (response.status === 400 && errorData.error?.message?.includes('API key')) {
-      throw new Error('Invalid API key. Please check your Gemini API key in settings.');
+    const errorMessage = responseData.error || responseData.message || response.statusText;
+    if (response.status === 400 && String(errorMessage).toLowerCase().includes('api key')) {
+      throw new Error('Invalid API key override. Please check your key in settings or use server default.');
     }
     if (response.status === 429) {
       throw new Error('Rate limit exceeded. Please wait a moment and try again.');
     }
-    throw new Error(`API error: ${errorData.error?.message || response.statusText}`);
+    throw new Error(`API error: ${errorMessage}`);
   }
 
-  return response.json();
+  return {
+    candidates: [
+      {
+        content: {
+          parts: [
+            {
+              text: responseData.text || '',
+            },
+          ],
+        },
+      },
+    ],
+  };
 }
 
 function parseGeminiResponse(response) {
@@ -530,14 +509,10 @@ function parseGeminiResponse(response) {
 // Handle persona chat
 async function handlePersonaChat(request) {
   const { persona, eventData, userProfile, chatHistory, userMessage } = request;
-  const apiKey = userProfile?.geminiApiKey;
-  
-  if (!apiKey) {
-    throw new Error('API key not configured');
-  }
+  const apiKeyOverride = userProfile?.geminiApiKey || null;
   
   const prompt = buildPersonaChatPrompt(persona, eventData, userProfile, chatHistory, userMessage);
-  const response = await callGeminiAPI(apiKey, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt);
   
   // Extract text reply
   const textContent = response.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -579,14 +554,10 @@ Provide a helpful, concise response. Give specific, actionable advice for engagi
 // Handle target person chat
 async function handleTargetChat(request) {
   const { person, eventData, userProfile, chatHistory, userMessage } = request;
-  const apiKey = userProfile?.geminiApiKey;
-  
-  if (!apiKey) {
-    throw new Error('API key not configured');
-  }
+  const apiKeyOverride = userProfile?.geminiApiKey || null;
   
   const prompt = buildTargetChatPrompt(person, eventData, userProfile, chatHistory, userMessage);
-  const response = await callGeminiAPI(apiKey, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt);
   
   const textContent = response.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!textContent) {
@@ -639,14 +610,10 @@ Be conversational and practical. Give concrete examples and scripts when appropr
 // Handle target person chat
 async function handleTargetChat(request) {
   const { person, eventData, userProfile, chatHistory, userMessage } = request;
-  const apiKey = userProfile?.geminiApiKey;
-  
-  if (!apiKey) {
-    throw new Error('API key not configured');
-  }
+  const apiKeyOverride = userProfile?.geminiApiKey || null;
   
   const prompt = buildTargetChatPrompt(person, eventData, userProfile, chatHistory, userMessage);
-  const response = await callGeminiAPI(apiKey, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt);
   
   const textContent = response.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!textContent) {

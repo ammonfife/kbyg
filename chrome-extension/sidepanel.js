@@ -24,9 +24,6 @@ const onboardingGoalsFinish = document.getElementById('onboarding-goals-finish')
 const importProfileBtn = document.getElementById('import-profile-btn');
 const importFileInput = document.getElementById('import-file-input');
 
-// Embedded Pro API Key
-const PRO_API_KEY = 'AIzaSyBFuyc6djAr1OXiBQhU7rluXOkWNxcVPfc';
-
 // Navigation history
 let navigationHistory = [];
 let historyIndex = -1;
@@ -76,11 +73,12 @@ let eventsSortBy = 'date'; // Default sort by last analyzed
 let peopleDisplayCount = 3; // How many people to show
 
 // Onboarding mode tracking
-let onboardingUsedProKey = false; // Track if user selected Pro mode
+let onboardingUsedByok = false;
 
 // Default profile structure
 const defaultProfile = {
   geminiApiKey: '',
+  useServerProxy: true,
   companyName: '',
   yourRole: '',
   product: '',
@@ -102,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   savedEvents = await loadSavedEvents();
   skippedUrls = await loadSkippedUrls();
   
-  if (userProfile.onboardingComplete && userProfile.geminiApiKey) {
+  if (userProfile.onboardingComplete && (userProfile.useServerProxy || userProfile.geminiApiKey)) {
     showMainSection();
     updateProfileIndicator();
     await updateCurrentUrl();
@@ -1465,15 +1463,15 @@ function hideSavedEventBanner() {
 
 // Mode Selection Event Listeners
 selectProBtn?.addEventListener('click', async () => {
-  // Use embedded Pro API key
-  userProfile.geminiApiKey = PRO_API_KEY;
-  onboardingUsedProKey = true;
+  userProfile.useServerProxy = true;
+  userProfile.geminiApiKey = '';
+  onboardingUsedByok = false;
   await saveProfile(userProfile);
   showOnboardingStep(2); // Go directly to company profile
 });
 
 selectByokBtn?.addEventListener('click', () => {
-  onboardingUsedProKey = false;
+  onboardingUsedByok = true;
   showOnboardingStep(1); // Go to API key input
 });
 
@@ -1508,7 +1506,14 @@ async function loadDemoProfile(profileKey) {
     const imported = await response.json();
     
     // Merge with defaults to ensure all fields exist, mark as demo mode
-    userProfile = { ...defaultProfile, ...imported, onboardingComplete: true, isDemoMode: true, demoProfileKey: profileKey };
+    userProfile = {
+      ...defaultProfile,
+      ...imported,
+      useServerProxy: true,
+      onboardingComplete: true,
+      isDemoMode: true,
+      demoProfileKey: profileKey,
+    };
     await saveProfile(userProfile);
     updateProfileIndicator();
     showToast('Demo profile loaded!');
@@ -1531,16 +1536,17 @@ onboardingApiNext.addEventListener('click', async () => {
     return;
   }
   userProfile.geminiApiKey = apiKey;
+  userProfile.useServerProxy = true;
+  onboardingUsedByok = true;
   await saveProfile(userProfile);
   showOnboardingStep(2);
 });
 
 onboardingCompanyBack.addEventListener('click', () => {
-  // Go back to API key step if BYOK, or mode selection if Pro
-  if (onboardingUsedProKey) {
-    showOnboardingStep('mode');
-  } else {
+  if (onboardingUsedByok) {
     showOnboardingStep(1);
+  } else {
+    showOnboardingStep('mode');
   }
 });
 
@@ -1655,9 +1661,8 @@ saveSettingsBtn.addEventListener('click', async () => {
   userProfile.notes = document.getElementById('set-notes').value.trim();
   
   const newApiKey = document.getElementById('set-api-key').value.trim();
-  if (newApiKey) {
-    userProfile.geminiApiKey = newApiKey;
-  }
+  userProfile.geminiApiKey = newApiKey;
+  userProfile.useServerProxy = true;
   
   await saveProfile(userProfile);
   settingsSection.classList.add('hidden');
