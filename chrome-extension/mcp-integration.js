@@ -4,7 +4,7 @@
  * Connects Chrome Extension to GTM MCP Server for persistent storage and enrichment
  */
 
-const MCP_SERVER_URL = 'http://localhost:3000'; // Update for production deployment
+const MCP_SERVER_URL = 'https://unified-mcp-server-production.up.railway.app'; // Railway production deployment
 
 /**
  * Save analyzed companies to MCP server (Turso database)

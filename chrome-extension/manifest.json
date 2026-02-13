@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Conference Intel & Execution Engine",
-  "version": "1.0.0",
-  "description": "AI-powered conference event analysis for GTM teams - know before you go",
+  "name": "KBYG - Know Before You Go",
+  "version": "1.4.1",
+  "description": "AI-powered conference intelligence for GTM teams - know before you go",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
     "sidePanel",
-    "tabs"
+    "tabs",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -25,6 +26,12 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["demo-profiles/*.json"],
+      "matches": ["<all_urls>"]
     }
   ]
 }
