@@ -392,6 +392,84 @@ async function callGeminiAPI(apiKeyOverride, prompt) {
   };
 }
 
+function extractBestEffortJson(textContent) {
+  let jsonStr = String(textContent || '')
+    .replace(/```json\s*/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  const firstBrace = jsonStr.indexOf('{');
+  if (firstBrace >= 0) {
+    jsonStr = jsonStr.slice(firstBrace);
+  }
+
+  let inString = false;
+  let escaped = false;
+  let lastCompleteObjectIndex = -1;
+  let stack = [];
+
+  for (let i = 0; i < jsonStr.length; i++) {
+    const ch = jsonStr[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{' || ch === '[') {
+      stack.push(ch);
+      continue;
+    }
+
+    if ((ch === '}' || ch === ']') && stack.length > 0) {
+      const top = stack[stack.length - 1];
+      if ((top === '{' && ch === '}') || (top === '[' && ch === ']')) {
+        stack.pop();
+      }
+
+      if (stack.length === 0) {
+        lastCompleteObjectIndex = i;
+      }
+    }
+  }
+
+  if (lastCompleteObjectIndex >= 0) {
+    jsonStr = jsonStr.slice(0, lastCompleteObjectIndex + 1);
+  }
+
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1').trim();
+
+  if (lastCompleteObjectIndex < 0) {
+    if (inString) {
+      const lastQuote = jsonStr.lastIndexOf('"');
+      if (lastQuote >= 0) {
+        jsonStr = jsonStr.slice(0, lastQuote);
+      }
+    }
+
+    jsonStr = jsonStr.replace(/,\s*$/, '');
+
+    const closeSuffix = [];
+    for (let i = stack.length - 1; i >= 0; i--) {
+      closeSuffix.push(stack[i] === '{' ? '}' : ']');
+    }
+    jsonStr += closeSuffix.join('');
+  }
+
+  return jsonStr;
+}
+
 function parseGeminiResponse(response) {
   try {
     // Check if response was blocked or had issues
@@ -423,55 +501,10 @@ function parseGeminiResponse(response) {
       throw new Error('No content in API response');
     }
 
-    // Try to extract JSON from the response
-    let jsonStr = textContent;
-    
-    // Try multiple patterns to extract JSON
-    // Pattern 1: Markdown code blocks with json tag
-    let jsonMatch = textContent.match(/```json\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1];
-    } else {
-      // Pattern 2: Any markdown code blocks
-      jsonMatch = textContent.match(/```\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1];
-      } else {
-        // Pattern 3: Try to find JSON object directly (starts with { and ends with })
-        const jsonObjectMatch = textContent.match(/\{[\s\S]*\}/);
-        if (jsonObjectMatch) {
-          jsonStr = jsonObjectMatch[0];
-        }
-      }
-    }
-    
-    // Clean up common issues
-    jsonStr = jsonStr.trim();
-    
-    // Remove any trailing commas before closing brackets (common LLM error)
-    jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1');
-    
-    // Fix truncated JSON by attempting to close it
-    if (finishReason === 'MAX_TOKENS' || !jsonStr.endsWith('}')) {
-      console.warn('Attempting to fix possibly truncated JSON');
-      // Count unclosed braces and brackets
-      const openBraces = (jsonStr.match(/\{/g) || []).length;
-      const closeBraces = (jsonStr.match(/\}/g) || []).length;
-      const openBrackets = (jsonStr.match(/\[/g) || []).length;
-      const closeBrackets = (jsonStr.match(/\]/g) || []).length;
-      
-      // Add missing closing characters
-      let suffix = '';
-      for (let i = 0; i < openBrackets - closeBrackets; i++) suffix += ']';
-      for (let i = 0; i < openBraces - closeBraces; i++) suffix += '}';
-      
-      if (suffix) {
-        // Remove any trailing incomplete content (like partial strings or numbers)
-        jsonStr = jsonStr.replace(/,\s*"[^"]*$/, ''); // Remove incomplete string property
-        jsonStr = jsonStr.replace(/,\s*$/, ''); // Remove trailing comma
-        jsonStr += suffix;
-        console.log('Added closing characters:', suffix);
-      }
+    let jsonStr = extractBestEffortJson(textContent);
+
+    if (finishReason === 'MAX_TOKENS') {
+      console.warn('Response was truncated by max tokens; using best-effort JSON recovery');
     }
     
     console.log('Attempting to parse JSON of length:', jsonStr.length);
