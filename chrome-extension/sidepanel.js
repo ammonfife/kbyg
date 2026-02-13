@@ -100,6 +100,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   await hydrateProfileFromBackendIfAvailable();
   savedEvents = await loadSavedEvents();
   skippedUrls = await loadSkippedUrls();
+
+  if (!userProfile.onboardingComplete && typeof supabase !== 'undefined' && supabase.isAuthenticated()) {
+    userProfile = {
+      ...defaultProfile,
+      ...userProfile,
+      useServerProxy: true,
+      onboardingComplete: true,
+    };
+    await saveProfile(userProfile);
+  }
   
   if (userProfile.onboardingComplete && (userProfile.useServerProxy || userProfile.geminiApiKey)) {
     showMainSection();
@@ -114,7 +124,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 window.addEventListener('kbyg-auth-changed', async () => {
   const hydrated = await hydrateProfileFromBackendIfAvailable();
-  if (!hydrated) return;
+  if (!hydrated && (typeof supabase === 'undefined' || !supabase.isAuthenticated())) return;
+
+  if (!hydrated) {
+    userProfile = {
+      ...defaultProfile,
+      ...userProfile,
+      useServerProxy: true,
+      onboardingComplete: true,
+    };
+    await saveProfile(userProfile);
+  }
 
   if (userProfile.onboardingComplete && (userProfile.useServerProxy || userProfile.geminiApiKey)) {
     showMainSection();
