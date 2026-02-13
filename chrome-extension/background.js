@@ -202,24 +202,26 @@ async function handleAnalyzeEvent(request) {
     pageTitle: title,
   });
 
+  const normalizedData = backfillEntitiesFromExtractedContent(data, content);
+
   // ✨ Save to backend database
   try {
     await ensureBackendAPIInitialized();
     
     const eventData = {
       url: url,
-      eventName: data.eventName,
-      date: data.date,
-      startDate: data.startDate || data.date,
-      endDate: data.endDate || data.date,
-      location: data.location,
-      description: data.description,
-      estimatedAttendees: data.estimatedAttendees || 0,
-      people: data.people || [],
-      sponsors: data.sponsors || [],
-      expectedPersonas: data.expectedPersonas || [],
-      nextBestActions: data.nextBestActions || [],
-      relatedEvents: data.relatedEvents || [],
+      eventName: normalizedData.eventName,
+      date: normalizedData.date,
+      startDate: normalizedData.startDate || normalizedData.date,
+      endDate: normalizedData.endDate || normalizedData.date,
+      location: normalizedData.location,
+      description: normalizedData.description,
+      estimatedAttendees: normalizedData.estimatedAttendees || 0,
+      people: normalizedData.people || [],
+      sponsors: normalizedData.sponsors || [],
+      expectedPersonas: normalizedData.expectedPersonas || [],
+      nextBestActions: normalizedData.nextBestActions || [],
+      relatedEvents: normalizedData.relatedEvents || [],
       analyzedAt: new Date().toISOString(),
     };
 
@@ -227,15 +229,59 @@ async function handleAnalyzeEvent(request) {
     console.log('[KBYG Backend] Event saved to database:', saveResult.eventId);
     
     // Add backend metadata to response
-    data.backendSaved = true;
-    data.backendEventId = saveResult.eventId;
+    normalizedData.backendSaved = true;
+    normalizedData.backendEventId = saveResult.eventId;
   } catch (backendError) {
     console.error('[KBYG Backend] Failed to save event:', backendError);
-    data.backendSaved = false;
-    data.backendError = backendError.message;
+    normalizedData.backendSaved = false;
+    normalizedData.backendError = backendError.message;
   }
 
-  return { data };
+  return { data: normalizedData };
+}
+
+function backfillEntitiesFromExtractedContent(data, content) {
+  const result = {
+    ...data,
+    people: Array.isArray(data.people) ? [...data.people] : [],
+    sponsors: Array.isArray(data.sponsors) ? [...data.sponsors] : []
+  };
+
+  if (result.people.length === 0 && Array.isArray(content?.speakerDirectory)) {
+    const seenPeople = new Set();
+    for (const speaker of content.speakerDirectory) {
+      const name = typeof speaker?.name === 'string' ? speaker.name.trim() : '';
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seenPeople.has(key)) continue;
+      seenPeople.add(key);
+
+      result.people.push({
+        name,
+        role: 'Speaker',
+        title: null,
+        company: null,
+        persona: null,
+        linkedin: null,
+        linkedinMessage: null,
+        iceBreaker: null
+      });
+    }
+  }
+
+  if (result.sponsors.length === 0 && Array.isArray(content?.sponsorCandidates)) {
+    const seenSponsors = new Set();
+    for (const sponsor of content.sponsorCandidates) {
+      const name = typeof sponsor === 'string' ? sponsor.trim() : '';
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seenSponsors.has(key)) continue;
+      seenSponsors.add(key);
+      result.sponsors.push({ name, tier: null });
+    }
+  }
+
+  return result;
 }
 
 async function getApiKey() {
@@ -339,6 +385,9 @@ Extract ALL people and companies from this event page. Return a JSON object:
 CRITICAL INSTRUCTIONS:
 - Find EVERY person mentioned on the page - speakers, panelists, moderators, hosts, CEOs, founders, attendees, anyone with a name
 - Do NOT skip anyone. List them ALL.
+- IMPORTANT: If page content includes speakerDirectory and sessionBlocks, treat them as high-confidence extracted source data.
+- Cross-reference sessionBlocks.speakersText and speakerDirectory to build complete people list with best possible title/company inference.
+- If sponsorCandidates is present, extract sponsor companies from it before attempting weaker inference.
 - Assign each person a persona category based on their job title
 - For EACH person, write a unique, natural conversation starter they'd appreciate hearing at this event
 - Infer expected personas based on event topic, speakers, and sponsors

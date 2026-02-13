@@ -25,6 +25,11 @@ function extractPageContent() {
   
   // Try to identify main content areas
   const mainContent = findMainContent(bodyClone);
+
+  // Extract structured agenda/session data for better parsing on complex event pages
+  const sessionBlocks = extractSessionBlocks(bodyClone);
+  const speakerDirectory = extractSpeakerDirectory(bodyClone);
+  const sponsorCandidates = extractSponsorCandidates(bodyClone);
   
   // Extract structured data if available
   const structuredData = extractStructuredData();
@@ -39,7 +44,10 @@ function extractPageContent() {
     meta: metaInfo,
     structuredData: structuredData,
     mainText: mainContent.text,
-    html: mainContent.html.substring(0, 50000) // Limit HTML size
+    html: mainContent.html.substring(0, 50000), // Limit HTML size
+    sessionBlocks: sessionBlocks.slice(0, 250),
+    speakerDirectory: speakerDirectory.slice(0, 300),
+    sponsorCandidates: sponsorCandidates.slice(0, 200)
   };
   
   return content;
@@ -82,6 +90,104 @@ function findMainContent(container) {
     text: text.substring(0, 30000), // Limit text size
     html: mainElement.innerHTML || ''
   };
+}
+
+function extractSessionBlocks(container) {
+  const blocks = [];
+  const seen = new Set();
+
+  const sessionNodes = container.querySelectorAll(
+    '.session_content_wrapper, .session_content_extend, li[class*="session"], .scheduleday_wrapper li.themeborder'
+  );
+
+  sessionNodes.forEach((node) => {
+    const title = cleanText(
+      node.querySelector('.session_title h6, .session_title, h6, h5, h4')?.textContent || ''
+    );
+    const time = cleanText(
+      node.querySelector('.session_start_time, time, [class*="time"]')?.textContent || ''
+    );
+    const speakersText = cleanText(
+      node.querySelector('.session_speakers, [class*="speaker"]')?.textContent || ''
+    );
+    const location = cleanText(
+      node.querySelector('.session_location_content, .session_location, [class*="location"]')?.textContent || ''
+    );
+    const description = cleanText(
+      node.querySelector('.session_excerpt, [class*="excerpt"], p')?.textContent || ''
+    );
+
+    if (!title || title.length < 4) return;
+
+    const key = `${title}|${time}|${location}`.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    blocks.push({
+      title,
+      time: time || null,
+      speakersText: speakersText || null,
+      location: location || null,
+      description: description || null
+    });
+  });
+
+  return blocks;
+}
+
+function extractSpeakerDirectory(container) {
+  const people = [];
+  const seen = new Set();
+
+  const anchors = container.querySelectorAll('a[href*="/speaker/"]');
+  anchors.forEach((anchor) => {
+    const name = cleanText(anchor.textContent || '');
+    if (!name || name.length < 3) return;
+
+    const href = anchor.getAttribute('href') || '';
+    const key = `${name}|${href}`.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const containerText = cleanText(anchor.closest('.session_speakers, li, .session_content, .speaker')?.textContent || '');
+
+    people.push({
+      name,
+      profileUrl: href || null,
+      context: containerText || null
+    });
+  });
+
+  return people;
+}
+
+function extractSponsorCandidates(container) {
+  const sponsors = [];
+  const seen = new Set();
+
+  const sponsorSections = container.querySelectorAll('[class*="sponsor"], [id*="sponsor"]');
+  sponsorSections.forEach((section) => {
+    const labels = section.querySelectorAll('a, img, h2, h3, h4, h5, h6, span, li');
+    labels.forEach((el) => {
+      let name = '';
+      if (el.tagName === 'IMG') {
+        name = cleanText(el.getAttribute('alt') || '');
+      } else {
+        name = cleanText(el.textContent || '');
+      }
+
+      if (!name || name.length < 2 || name.length > 120) return;
+      if (/sponsor|sponsorship|opportunities/i.test(name)) return;
+
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      sponsors.push(name);
+    });
+  });
+
+  return sponsors;
 }
 
 // Extract JSON-LD and other structured data
@@ -145,8 +251,7 @@ function extractMetaInfo() {
 // Clean up extracted text
 function cleanText(text) {
   return text
-    .replace(/\s+/g, ' ')           // Normalize whitespace
-    .replace(/\n\s*\n/g, '\n')      // Remove empty lines
-    .replace(/\t/g, ' ')            // Replace tabs
+    .replace(/[ \t]+/g, ' ')        // Normalize spaces and tabs
+    .replace(/\n{3,}/g, '\n\n')      // Collapse excessive line breaks
     .trim();
 }
