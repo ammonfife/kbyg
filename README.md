@@ -2,6 +2,13 @@
 
 Capture company profiles from conference/event websites with one click.
 
+## Repository Ownership (Important)
+
+- Extension source of truth: https://github.com/altonalexander/gtm-hackathon
+- Website/Loveable workspace: https://github.com/altonalexander/kbyg-ai
+- Public extension distribution (this repo): https://github.com/ammonfife/kbyg
+- Workflow guide: https://github.com/altonalexander/kbyg-ai/blob/main/LOVEABLEAGENT.md
+
 ## ⚡ Auto-Synced Repository
 
 This repository is **automatically synced** from the main project:
@@ -14,6 +21,9 @@ This repository is **automatically synced** from the main project:
 - Store profiles locally in Chrome storage
 - Sync to GTM Intelligence Hub (web dashboard)
 - AI-powered event analysis with Gemini
+
+## Release
+- **v1.4.1** (2026-02-13): Version bump + auth flow alignment updates.
 
 ## 🚀 Installation
 
