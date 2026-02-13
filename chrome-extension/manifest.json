@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KBYG - Know Before You Go",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "AI-powered conference intelligence for GTM teams - know before you go",
   "permissions": [
     "activeTab",
@@ -23,15 +23,23 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["demo-profiles/*.json"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "demo-profiles/*.json"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }
