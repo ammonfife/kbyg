@@ -277,6 +277,26 @@ class BackendAPI {
       throw error;
     }
   }
+
+  async saveParseTelemetry(telemetry) {
+    try {
+      const response = await fetch(`${this.baseUrl}/parse-telemetry`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(telemetry),
+      });
+
+      const result = await response.json().catch(() => ({ success: false }));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to save parse telemetry');
+      }
+
+      return result;
+    } catch (error) {
+      console.warn('[KBYG Backend] Failed to save parse telemetry:', error?.message || error);
+      return { success: false };
+    }
+  }
 }
 
 // Create global instance

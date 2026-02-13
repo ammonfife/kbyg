@@ -16,6 +16,26 @@ function resolveApiKeyOverride(profile) {
   return rawKey || null;
 }
 
+const PARSE_TELEMETRY_SAMPLE_RATE = 0.12;
+
+function shouldSampleParseTelemetry() {
+  return Math.random() < PARSE_TELEMETRY_SAMPLE_RATE;
+}
+
+async function reportParseTelemetry(payload) {
+  try {
+    await ensureBackendAPIInitialized();
+
+    if (!backendAPI?.authToken && !backendAPI?.bearerToken) {
+      return;
+    }
+
+    await backendAPI.saveParseTelemetry(payload);
+  } catch (error) {
+    console.warn('[KBYG Telemetry] Failed to report parse telemetry:', error?.message || error);
+  }
+}
+
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ windowId: tab.windowId });
@@ -123,7 +143,11 @@ If ANY answer is NO → return isEvent=false or confidence="low"
 
 Only return confidence="high" when you are 100% certain the WHOLE PAGE is a dedicated event page.`;
 
-  const response = await callGeminiAPI(apiKeyOverride, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt, {
+    stage: 'precheck',
+    pageUrl: url,
+    pageTitle: title,
+  });
   const result = parsePreCheckResponse(response);
   
   return result;
@@ -165,10 +189,18 @@ async function handleAnalyzeEvent(request) {
   const prompt = buildAnalysisPrompt(content, url, title, profile);
 
   // Call Gemini API
-  const response = await callGeminiAPI(apiKeyOverride, prompt);
+  const response = await callGeminiAPI(apiKeyOverride, prompt, {
+    stage: 'analyze_event',
+    pageUrl: url,
+    pageTitle: title,
+  });
 
   // Parse the response
-  const data = parseGeminiResponse(response);
+  const data = parseGeminiResponse(response, {
+    stage: 'analyze_event',
+    pageUrl: url,
+    pageTitle: title,
+  });
 
   // ✨ Save to backend database
   try {
@@ -342,7 +374,7 @@ Page Content:
 ${JSON.stringify(content, null, 2)}`;
 }
 
-async function callGeminiAPI(apiKeyOverride, prompt) {
+async function callGeminiAPI(apiKeyOverride, prompt, context = {}) {
   await ensureBackendAPIInitialized();
 
   const payload = {
@@ -365,6 +397,15 @@ async function callGeminiAPI(apiKeyOverride, prompt) {
 
   if (!response.ok) {
     const errorMessage = responseData.error || responseData.message || response.statusText;
+    reportParseTelemetry({
+      stage: context.stage || 'gemini_api',
+      status: 'api_error',
+      errorMessage: String(errorMessage),
+      pageUrl: context.pageUrl,
+      pageTitle: context.pageTitle,
+      rawResponseText: JSON.stringify(responseData || {}),
+    });
+
     if (response.status === 400 && String(errorMessage).toLowerCase().includes('api key')) {
       if (apiKeyOverride) {
         throw new Error('Your Gemini API key in settings is invalid or expired. Update it or enable server proxy mode.');
@@ -517,7 +558,7 @@ function extractFallbackEventData(rawText) {
   };
 }
 
-function parseGeminiResponse(response) {
+function parseGeminiResponse(response, context = {}) {
   try {
     // Check if response was blocked or had issues
     const candidate = response.candidates?.[0];
@@ -567,8 +608,32 @@ function parseGeminiResponse(response) {
       const fallbackData = extractFallbackEventData(jsonStr || textContent);
       if (fallbackData) {
         console.warn('Using fallback event extraction due to malformed JSON response');
+        reportParseTelemetry({
+          stage: context.stage || 'analyze_event',
+          status: 'parse_fallback',
+          errorMessage: String(parseError?.message || parseError),
+          pageUrl: context.pageUrl,
+          pageTitle: context.pageTitle,
+          finishReason: finishReason || null,
+          sampleReason: 'fallback',
+          rawResponseText: textContent,
+          recoveredJsonText: jsonStr,
+          parsedEventName: fallbackData.eventName,
+          parsedStartDate: fallbackData.startDate,
+        });
         return fallbackData;
       }
+      reportParseTelemetry({
+        stage: context.stage || 'analyze_event',
+        status: 'parse_error',
+        errorMessage: String(parseError?.message || parseError),
+        pageUrl: context.pageUrl,
+        pageTitle: context.pageTitle,
+        finishReason: finishReason || null,
+        sampleReason: 'parse_failure',
+        rawResponseText: textContent,
+        recoveredJsonText: jsonStr,
+      });
       throw parseError;
     }
     
@@ -576,7 +641,7 @@ function parseGeminiResponse(response) {
     // Handle both 'people' and legacy 'speakers' field names
     const people = Array.isArray(data.people) ? data.people : (Array.isArray(data.speakers) ? data.speakers : []);
     
-    return {
+    const parsedResult = {
       eventName: data.eventName || 'Unknown Event',
       date: data.date || null,
       startDate: data.startDate || null,
@@ -591,8 +656,32 @@ function parseGeminiResponse(response) {
       relatedEvents: Array.isArray(data.relatedEvents) ? data.relatedEvents : [],
       gtmInsights: data.gtmInsights || null
     };
+
+    if (shouldSampleParseTelemetry()) {
+      reportParseTelemetry({
+        stage: context.stage || 'analyze_event',
+        status: 'parse_success',
+        pageUrl: context.pageUrl,
+        pageTitle: context.pageTitle,
+        finishReason: finishReason || null,
+        sampleReason: 'success_sample',
+        rawResponseText: textContent,
+        recoveredJsonText: jsonStr,
+        parsedEventName: parsedResult.eventName,
+        parsedStartDate: parsedResult.startDate,
+      });
+    }
+
+    return parsedResult;
   } catch (error) {
     console.error('Failed to parse Gemini response:', error);
+    reportParseTelemetry({
+      stage: context.stage || 'analyze_event',
+      status: 'parse_error',
+      errorMessage: String(error?.message || error),
+      pageUrl: context.pageUrl,
+      pageTitle: context.pageTitle,
+    });
     throw new Error('Failed to parse event data. The page might not be an event page.');
   }
 }
