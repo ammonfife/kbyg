@@ -2167,13 +2167,16 @@ async function runAnalysis() {
     
     // Check pre-check result
     if (lastPreCheckResult) {
-      if (lastPreCheckResult.isEvent === false || lastPreCheckResult.confidence !== 'high') {
+      const confidence = String(lastPreCheckResult.confidence || '').toLowerCase();
+      const shouldBlockAsNonEvent = lastPreCheckResult.isEvent === false && confidence === 'high';
+
+      if (shouldBlockAsNonEvent) {
         // Save this URL as a non-event so we don't re-check it
         await saveSkippedUrl(tab.url, 'not-event');
         console.log('Saved as skipped URL:', tab.url);
-        
+
         hideLoading();
-        showError('📄 This page is not an event. Navigate to an event page to analyze it.', true);
+        showError('📄 This page is likely not an event. Click Analyze Anyway to force analysis.', true);
         return;
       }
     }
