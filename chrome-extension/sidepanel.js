@@ -57,6 +57,7 @@ const copyBtn = document.getElementById('copy-btn');
 const csvBtn = document.getElementById('csv-btn');
 const reanalyzeBtn = document.getElementById('reanalyze-btn');
 const currentUrlSpan = document.getElementById('current-url');
+const headerVersion = document.getElementById('header-version');
 const exportAllBtn = document.getElementById('export-all-btn');
 const viewTargetsBtn = document.getElementById('view-targets-btn');
 
@@ -96,6 +97,13 @@ const defaultProfile = {
 
 // Initialize side panel
 document.addEventListener('DOMContentLoaded', async () => {
+  if (headerVersion && typeof chrome !== 'undefined' && chrome.runtime?.getManifest) {
+    const version = chrome.runtime.getManifest()?.version;
+    if (version) {
+      headerVersion.textContent = `v${version}`;
+    }
+  }
+
   userProfile = await loadProfile();
   await hydrateProfileFromBackendIfAvailable();
   savedEvents = await loadSavedEvents();
