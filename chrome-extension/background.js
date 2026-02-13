@@ -7,6 +7,15 @@ async function ensureBackendAPIInitialized() {
   await backendAPI.initialize();
 }
 
+function resolveApiKeyOverride(profile) {
+  if (!profile || profile.useServerProxy !== false) {
+    return null;
+  }
+
+  const rawKey = typeof profile.geminiApiKey === 'string' ? profile.geminiApiKey.trim() : '';
+  return rawKey || null;
+}
+
 // Open side panel when extension icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ windowId: tab.windowId });
@@ -49,7 +58,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Lightweight pre-check to determine if page is an event
 async function handlePreCheckEvent(request) {
   const profile = request.userProfile || {};
-  const apiKeyOverride = profile.geminiApiKey || null;
+  const apiKeyOverride = resolveApiKeyOverride(profile);
 
   const { content, url, title } = request;
   
@@ -148,7 +157,7 @@ function parsePreCheckResponse(response) {
 
 async function handleAnalyzeEvent(request) {
   const profile = request.userProfile || {};
-  const apiKeyOverride = profile.geminiApiKey || null;
+  const apiKeyOverride = resolveApiKeyOverride(profile);
 
   const { content, url, title } = request;
 
@@ -357,7 +366,10 @@ async function callGeminiAPI(apiKeyOverride, prompt) {
   if (!response.ok) {
     const errorMessage = responseData.error || responseData.message || response.statusText;
     if (response.status === 400 && String(errorMessage).toLowerCase().includes('api key')) {
-      throw new Error('Invalid API key override. Please check your key in settings or use server default.');
+      if (apiKeyOverride) {
+        throw new Error('Your Gemini API key in settings is invalid or expired. Update it or enable server proxy mode.');
+      }
+      throw new Error('Server Gemini API key is invalid or expired. Please renew the backend key.');
     }
     if (response.status === 429) {
       throw new Error('Rate limit exceeded. Please wait a moment and try again.');
@@ -503,7 +515,7 @@ function parseGeminiResponse(response) {
 // Handle persona chat
 async function handlePersonaChat(request) {
   const { persona, eventData, userProfile, chatHistory, userMessage } = request;
-  const apiKeyOverride = userProfile?.geminiApiKey || null;
+  const apiKeyOverride = resolveApiKeyOverride(userProfile);
   
   const prompt = buildPersonaChatPrompt(persona, eventData, userProfile, chatHistory, userMessage);
   const response = await callGeminiAPI(apiKeyOverride, prompt);
@@ -548,7 +560,7 @@ Provide a helpful, concise response. Give specific, actionable advice for engagi
 // Handle target person chat
 async function handleTargetChat(request) {
   const { person, eventData, userProfile, chatHistory, userMessage } = request;
-  const apiKeyOverride = userProfile?.geminiApiKey || null;
+  const apiKeyOverride = resolveApiKeyOverride(userProfile);
   
   const prompt = buildTargetChatPrompt(person, eventData, userProfile, chatHistory, userMessage);
   const response = await callGeminiAPI(apiKeyOverride, prompt);
@@ -604,7 +616,7 @@ Be conversational and practical. Give concrete examples and scripts when appropr
 // Handle target person chat
 async function handleTargetChat(request) {
   const { person, eventData, userProfile, chatHistory, userMessage } = request;
-  const apiKeyOverride = userProfile?.geminiApiKey || null;
+  const apiKeyOverride = resolveApiKeyOverride(userProfile);
   
   const prompt = buildTargetChatPrompt(person, eventData, userProfile, chatHistory, userMessage);
   const response = await callGeminiAPI(apiKeyOverride, prompt);
