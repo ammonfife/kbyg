@@ -20,6 +20,18 @@ class SupabaseClient {
     this.session = null;
   }
 
+  normalizeSession(session) {
+    if (!session) return null;
+    if (session.access_token) return session;
+    if (session.currentSession?.access_token) return session.currentSession;
+    if (session.session?.access_token) return session.session;
+    if (Array.isArray(session)) {
+      const found = session.find(item => item?.access_token);
+      return found || null;
+    }
+    return null;
+  }
+
   /**
    * Initialize and restore session from storage
    */
@@ -229,8 +241,9 @@ class SupabaseClient {
    * Save session to Chrome storage
    */
   async saveSession(session) {
+    const normalized = this.normalizeSession(session);
     return new Promise((resolve) => {
-      chrome.storage.local.set({ supabaseSession: session }, resolve);
+      chrome.storage.local.set({ supabaseSession: normalized }, resolve);
     });
   }
 
@@ -240,7 +253,7 @@ class SupabaseClient {
   async getStoredSession() {
     return new Promise((resolve) => {
       chrome.storage.local.get(['supabaseSession'], (result) => {
-        resolve(result.supabaseSession || null);
+        resolve(this.normalizeSession(result.supabaseSession));
       });
     });
   }
@@ -271,11 +284,12 @@ class SupabaseClient {
         throw new Error(data.error_description || 'Token refresh failed');
       }
 
-      this.session = data;
-      await this.saveSession(data);
+      const normalized = this.normalizeSession(data);
+      this.session = normalized;
+      await this.saveSession(normalized);
       
       console.log('[Supabase] Session refreshed');
-      return { data, error: null };
+      return { data: normalized, error: null };
     } catch (error) {
       console.error('[Supabase] Refresh error:', error);
       return { data: null, error };
